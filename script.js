@@ -1,0 +1,78 @@
+var cp=a=>JSON.parse(JSON.stringify(a)),$=i=>document.getElementById(i),f2=v=>+v.toFixed(2);
+var M={img:["Photo","Niveaux de gris","Pixels","Normalisation","Convolution","ReLU","Pooling","Flatten"],sig:["Signal","Échantillonnage","Valeurs","Convolution","ReLU","Pooling","Flatten"]};
+var D={img:{ph:2,pw:2,pk:{"Bord vertical":[[-1,0,1],[-1,0,1],[-1,0,1]],"Bord horizontal":[[-1,-1,-1],[0,0,0],[1,1,1]],"Somme (flou)":[[1,1,1],[1,1,1],[1,1,1]]}},sig:{ph:1,pw:2,pk:{"Dérivée":[[-1,0,1]],"Moyenne":[[1,1,1]],"Pic":[[-1,2,-1]]}}};
+var SG={"Créneau":t=>t>.3&&t<.7?9:0,"Sinus":t=>4.5+4.5*Math.sin(2*Math.PI*t),"Pic":t=>9*Math.exp(-Math.pow((t-.5)/.1,2)),"Bruité":t=>Math.max(0,Math.min(9,4.5+3*Math.sin(2*Math.PI*t)+1.5*Math.sin(t*60)))};
+var src=document.createElement("canvas");src.width=src.height=160;var sx=src.getContext("2d"),S={},TM=null,cur="img",CL={"Convolution":"c-conv","ReLU":"c-relu","Pooling":"c-pool"};
+function drawCat(){var c=sx;c.fillStyle="#bcd7ee";c.fillRect(0,0,160,160);c.fillStyle="#6b8e5a";c.fillRect(0,130,160,30);c.fillStyle="#d98b3a";
+c.beginPath();c.moveTo(30,70);c.lineTo(35,15);c.lineTo(65,45);c.fill();c.beginPath();c.moveTo(130,70);c.lineTo(125,15);c.lineTo(95,45);c.fill();
+c.beginPath();c.ellipse(80,88,52,46,0,0,7);c.fill();c.fillStyle="#f5d9b0";c.beginPath();c.ellipse(80,106,24,17,0,0,7);c.fill();
+c.strokeStyle="#8a4a12";c.lineWidth=4;[[80,45,80,60],[66,50,68,62],[94,50,92,62]].forEach(l=>{c.beginPath();c.moveTo(l[0],l[1]);c.lineTo(l[2],l[3]);c.stroke()});
+c.fillStyle="#7ed957";[60,100].forEach(x=>{c.beginPath();c.ellipse(x,80,9,10,0,0,7);c.fill()});c.fillStyle="#111";[60,100].forEach(x=>{c.beginPath();c.ellipse(x,80,3,8,0,0,7);c.fill()});
+c.fillStyle="#c4506b";c.beginPath();c.moveTo(74,96);c.lineTo(86,96);c.lineTo(80,103);c.fill();
+c.strokeStyle="#333";c.lineWidth=1.5;[[56,104,20,98],[56,108,20,112],[104,104,140,98],[104,108,140,112]].forEach(l=>{c.beginPath();c.moveTo(l[0],l[1]);c.lineTo(l[2],l[3]);c.stroke()})}
+function grid(){var s=S.img,n=s.n,d=sx.getImageData(0,0,160,160).data,b=Math.floor(160/n),G=[];
+for(var i=0;i<n;i++){G.push([]);for(var j=0;j<n;j++){var t=0;for(var y=i*b;y<(i+1)*b;y++)for(var x=j*b;x<(j+1)*b;x++){var k=4*(y*160+x);t+=.299*d[k]+.587*d[k+1]+.114*d[k+2]}G[i].push(Math.round(t/(b*b)))}}
+s.G=G;s.I=G.map(r=>r.map(v=>f2(v/255)))}
+function sigI(){var s=S.sig;s.I=[Array.from({length:s.n},(_,k)=>Math.max(0,Math.min(9,Math.round(SG[s.pre]((k+.5)/s.n)))))]}
+function conv(I,K){var O=[];for(var i=0;i<=I.length-K.length;i++){O.push([]);for(var j=0;j<=I[0].length-K[0].length;j++){var s=0;for(var a=0;a<K.length;a++)for(var b=0;b<K[0].length;b++)s+=I[i+a][j+b]*K[a][b];O[i].push(f2(s))}}return O}
+function vals(A,i,j,h,w){var v=[];for(var a=0;a<h;a++)for(var b=0;b<w;b++)v.push(A[i+a][j+b]);return v}
+function pool(A,ph,pw,t){var P=[];for(var i=0;i+ph<=A.length;i+=ph){P.push([]);for(var j=0;j+pw<=A[0].length;j+=pw){var v=vals(A,i,j,ph,pw);P[P.length-1].push(t=="max"?Math.max(...v):f2(v.reduce((x,y)=>x+y,0)/v.length))}}return P}
+var gs=g=>{g=Math.max(0,Math.min(255,Math.round(g)));return `background:rgb(${g},${g},${g});color:${g>128?"#000":"#fff"}`};
+var heat=(v,mx)=>`background:${v>=0?"rgba(83,74,183,":"rgba(216,90,48,"}${Math.min(1,Math.abs(v)/(mx||1))*.55})`;
+var T=(m,A,o)=>"<table>"+A.map((r,i)=>"<tr>"+r.map((v,j)=>{var c=o.f?o.f(i,j):"",st=o.s?o.s(i,j,v):"";return `<td class="${c}${o.k?" k":""}" style="${st}"${o.k?` onclick="pk('${m}','${o.k}',${i},${j})"`:""}>${o.e?`<input type="number" step="any" value="${v}" onchange="ed('${m}','${o.e}',${i},${j},this.value)">`:v}</td>`}).join("")+"</tr>").join("")+"</table>";
+var hd=(t,x)=>`<h2>${t}</h2><p>${x}</p>`;
+function R(m){var s=S[m],nm=M[m][s.step],d=D[m],h='<div class="steps">'+M[m].map((n,i)=>`<button class="${i==s.step?"on":i<s.step?"done":""}" onclick="go('${m}',${i})">${i+1}. ${n}</button>`).join("")+`</div><div class="card ${CL[nm]||"c-info"}${s.fresh?" fade":""}">`;s.fresh=0;
+var I=s.I,K=s.K,A=conv(I,K),B=s.relu?A.map(r=>r.map(v=>Math.max(0,v))):A,P=pool(B,d.ph,d.pw,s.type);
+s.c[0]=Math.min(s.c[0],A.length-1);s.c[1]=Math.min(s.c[1],A[0].length-1);s.p[0]=Math.min(s.p[0],P.length-1);s.p[1]=Math.min(s.p[1],P[0].length-1);
+var ci=s.c[0],cj=s.c[1],pi=s.p[0],pj=s.p[1],kh=K.length,kw=K[0].length,mx=Math.max(1,...A.flat().map(Math.abs));
+var win=(i,j)=>i>=ci&&i<ci+kh&&j>=cj&&j<cj+kw?"hl":"";
+if(nm=="Photo")h+=hd("1. La photo","Une image est une grille de pixels. Chaque pixel contient 3 valeurs : rouge, vert, bleu (R, V, B), entre 0 et 255.")+'<canvas id="cv0" width="160" height="160" style="width:200px"></canvas><div class="row"><button onclick="drawCat();grid();R(\'img\')">Chat d’exemple</button><label class="btn">Charger ma photo<input type="file" accept="image/*" hidden onchange="up(this)"></label></div><p>Votre photo reste sur votre appareil.</p>';
+else if(nm=="Niveaux de gris"){var q=sx.getImageData(s.px[0],s.px[1],1,1).data,g=Math.round(.299*q[0]+.587*q[1]+.114*q[2]);
+h+=hd("2. Niveaux de gris","Un CNN travaille souvent sur une seule valeur par pixel : le niveau de gris (0 = noir, 255 = blanc). Touchez l’image pour choisir un pixel.")+'<div class="row"><canvas id="cv1" width="160" height="160" style="width:160px" onclick="pickpx(event,this)"></canvas><span class="op">→</span><canvas id="cv2" width="160" height="160" style="width:160px" onclick="pickpx(event,this)"></canvas></div>'
++`<div class="calc">Pixel (${s.px[0]}, ${s.px[1]}) : R=${q[0]}, V=${q[1]}, B=${q[2]}<br>gris = 0,299×${q[0]} + 0,587×${q[1]} + 0,114×${q[2]} = <b>${g}</b></div>`}
+else if(nm=="Pixels")h+=hd("3. Pixels : la grille de nombres","On réduit l’image en une grille. Chaque case est la moyenne de la zone, en niveau de gris (0 à 255). C’est ce que voit le réseau.")+`<div class="row"><label>Taille de la grille : <select onchange="setN('img',this.value)">${[6,8,10].map(n=>`<option${n==s.n?" selected":""}>${n}</option>`).join("")}</select></label></div><div class="flow">`+T(m,s.G,{s:(i,j,v)=>gs(v)})+"</div>";
+else if(nm=="Normalisation")h+=hd("4. Normalisation","On divise chaque valeur par 255 pour obtenir des nombres entre 0 (noir) et 1 (blanc). Cela facilite l’apprentissage.")+'<div class="flow">'+T(m,I,{s:(i,j,v)=>gs(v*255)})+`</div><div class="calc">Exemple, case (1, 1) : ${s.G[0][0]} / 255 = <b>${I[0][0]}</b></div>`;
+else if(nm=="Signal")h+=hd("1. Le signal","Un signal est une grandeur qui varie dans le temps (capteur, audio, ECG…). Choisissez un signal.")+'<canvas id="cv0" width="320" height="120" style="width:100%;max-width:320px"></canvas><div class="row">'+Object.keys(SG).map(n=>`<button class="${n==s.pre?"on":""}" onclick="setPre('${n}')">${n}</button>`).join("")+"</div>";
+else if(nm=="Échantillonnage")h+=hd("2. Échantillonnage","Le capteur ne mesure pas en continu : il prend une mesure à intervalles réguliers. Chaque point est un échantillon.")+'<canvas id="cv0" width="320" height="120" style="width:100%;max-width:320px"></canvas>'+`<div class="row"><label>Nombre d’échantillons : <select onchange="setN('sig',this.value)">${[10,12,16].map(n=>`<option${n==s.n?" selected":""}>${n}</option>`).join("")}</select></label></div>`;
+else if(nm=="Valeurs")h+=hd("3. Les valeurs numériques","Chaque échantillon devient un nombre (ici de 0 à 9). Le signal est maintenant une liste de valeurs : c’est l’entrée du CNN.")+'<div class="flow">'+T(m,I,{s:(i,j,v)=>heat(v,9)})+"</div>";
+else if(nm=="Convolution"){var sum=0,terms=[];for(var a=0;a<kh;a++)for(var b=0;b<kw;b++){var x=I[ci+a][cj+b],w=K[a][b];terms.push(`(${x}×${w})`);sum+=x*w}sum=f2(sum);
+h+=hd((M[m].indexOf(nm)+1)+". Convolution","Le filtre glisse sur l’entrée : à chaque position, on multiplie terme à terme puis on additionne. Changez le filtre, modifiez une valeur, touchez une case du résultat.")+'<div class="row"><button class="go" onclick="play(\''+m+'\',\'c\')">▶ Animer le filtre</button><span>Filtre :</span>'+Object.keys(d.pk).map(n=>`<button onclick="pre('${m}','${n}')">${n}</button>`).join("")+'</div><div class="flow"><div>'+T(m,I,{e:"I",f:win,s:m=="img"?(i,j,v)=>gs(v*255):(i,j,v)=>heat(v,9)})+'</div><span class="op">*</span><div>'+T(m,K,{e:"K",s:(i,j,v)=>heat(v,1)})+'</div><span class="op">=</span><div>'+T(m,A,{k:"c",f:(i,j)=>i==ci&&j==cj?"sel":"",s:(i,j,v)=>heat(v,mx)})+"</div></div>"
++`<p>Violet : valeur positive. Orange : valeur négative.</p><div class="calc">Case (${ci+1}, ${cj+1}) : ${terms.join(" + ")} = <b>${sum}</b></div><div class="row"><span style="font-size:14px">À vous : quel est ce résultat ?</span><input class="ans" id="${m}a" type="number" step="any"><button onclick="chk('${m}',${sum})">Vérifier</button><span id="${m}r" style="font-size:14px"></span></div>`+lb(m)}
+else if(nm=="ReLU")h+=hd((M[m].indexOf(nm)+1)+". ReLU","ReLU(x) = max(0, x) : les valeurs négatives deviennent 0. Cela garde seulement les réponses positives du filtre.")+`<div class="row"><label><input type="checkbox" ${s.relu?"checked":""} onchange="S.${m}.relu=this.checked;R('${m}')"> Activer ReLU</label></div><div class="flow"><div>`+T(m,A,{k:"c",f:(i,j)=>i==ci&&j==cj?"sel":"",s:(i,j,v)=>heat(v,mx)})+'</div><span class="op">→</span><div>'+T(m,B,{f:(i,j)=>i==ci&&j==cj?"sel":"",s:(i,j,v)=>heat(v,mx)})+`</div></div><div class="calc">Case (${ci+1}, ${cj+1}) : max(0, ${A[ci][cj]}) = <b>${B[ci][cj]}</b></div>`;
+else if(nm=="Pooling"){var pv=vals(B,pi*d.ph,pj*d.pw,d.ph,d.pw);
+h+=hd((M[m].indexOf(nm)+1)+". Pooling "+d.ph+"×"+d.pw,"On résume chaque zone par une seule valeur : le maximum ou la moyenne. La taille diminue. Touchez une case du résultat.")+`<div class="row"><button class="go" onclick="play('${m}','p')">▶ Animer le pooling</button><label>Type : <select onchange="S.${m}.type=this.value;R('${m}')"><option value="max"${s.type=="max"?" selected":""}>Max</option><option value="avg"${s.type=="avg"?" selected":""}>Moyenne</option></select></label></div><div class="flow"><div>`+T(m,B,{f:(i,j)=>i>=pi*d.ph&&i<pi*d.ph+d.ph&&j>=pj*d.pw&&j<pj*d.pw+d.pw?"hl2":"",s:(i,j,v)=>heat(v,mx)})+'</div><span class="op">→</span><div>'+T(m,P,{k:"p",f:(i,j)=>i==pi&&j==pj?"sel":"",s:(i,j,v)=>heat(v,mx)})+`</div></div><div class="calc">Zone verte : ${s.type=="max"?"max":"moyenne"}(${pv.join(", ")}) = <b>${P[pi][pj]}</b><br>Taille : ${A.length}×${A[0].length} → ${P.length}×${P[0].length}</div>`}
+else{var vec=[P.flat()];h+=hd((M[m].indexOf(nm)+1)+". Flatten puis couche dense","On aligne toutes les valeurs en un vecteur de "+vec[0].length+" nombres. Chaque neurone de la couche dense calcule : sortie = Σ(poids × valeur) + biais. Les poids sont appris pendant l’entraînement.")+'<div class="flow">'+T(m,vec,{s:(i,j,v)=>heat(v,mx)})+`</div><div class="calc">Dernier neurone : la classe prédite (${m=="img"?"chat, pas chat":"créneau, sinus, pic"}).</div>`}
+h+=`</div><div class="row"><button ${s.step?"":"disabled"} onclick="go('${m}',${s.step-1})">← Précédent</button><button class="on" ${s.step<M[m].length-1?"":"disabled"} onclick="go('${m}',${s.step+1})">Suivant →</button></div>`;
+$(m).innerHTML=h;paint(m)}
+function paint(m){var s=S[m],nm=M[m][s.step];
+if(nm=="Photo")$("cv0").getContext("2d").drawImage(src,0,0);
+if(nm=="Niveaux de gris"){var a=$("cv1").getContext("2d"),b=$("cv2").getContext("2d");a.drawImage(src,0,0);var id=sx.getImageData(0,0,160,160),d=id.data;for(var k=0;k<d.length;k+=4){var g=.299*d[k]+.587*d[k+1]+.114*d[k+2];d[k]=d[k+1]=d[k+2]=g}b.putImageData(id,0,0);[a,b].forEach(c=>{c.strokeStyle="#e24b4a";c.lineWidth=2;c.strokeRect(s.px[0]-4,s.px[1]-4,9,9)})}
+if(m=="sig"&&(nm=="Signal"||nm=="Échantillonnage")){var c=$("cv0").getContext("2d"),W=320,H=120,Y=v=>H-10-v*10,f=SG[s.pre];c.clearRect(0,0,W,H);c.strokeStyle="#888";c.lineWidth=1;c.beginPath();c.moveTo(0,H-10);c.lineTo(W,H-10);c.stroke();
+c.strokeStyle="#7F77DD";c.lineWidth=2;c.beginPath();for(var x=0;x<=W;x++){var y=Y(f(x/W));x?c.lineTo(x,y):c.moveTo(x,y)}c.stroke();
+if(nm=="Échantillonnage"){c.strokeStyle="#D85A30";c.fillStyle="#D85A30";c.lineWidth=1.5;for(var k=0;k<s.n;k++){var xk=(k+.5)/s.n*W,yk=Y(s.I[0][k]);c.beginPath();c.moveTo(xk,H-10);c.lineTo(xk,yk);c.stroke();c.beginPath();c.arc(xk,yk,3.5,0,7);c.fill()}}}}
+function go(m,i){clearInterval(TM);S[m].step=i;S[m].fresh=1;R(m);window.scrollTo({top:0,behavior:"smooth"})}
+function ed(m,k,i,j,v){S[m][k][i][j]=Number(v)||0;R(m)}
+function pk(m,k,i,j){S[m][k]=[i,j];R(m)}
+function pre(m,n){S[m].K=cp(D[m].pk[n]);R(m)}
+function setN(m,v){S[m].n=+v;m=="img"?grid():sigI();R(m)}
+function setPre(n){S.sig.pre=n;sigI();R("sig")}
+function pickpx(e,c){var r=c.getBoundingClientRect();S.img.px=[Math.min(159,Math.max(0,Math.floor((e.clientX-r.left)/r.width*160))),Math.min(159,Math.max(0,Math.floor((e.clientY-r.top)/r.height*160)))];R("img")}
+function up(inp){var fl=inp.files[0];if(!fl)return;var fr=new FileReader();fr.onload=function(){var im=new Image();im.onload=function(){var z=Math.min(im.width,im.height);sx.drawImage(im,(im.width-z)/2,(im.height-z)/2,z,z,0,0,160,160);grid();R("img")};im.src=fr.result};fr.readAsDataURL(fl)}
+function chk(m,sum){var v=$(m+"a").value,e=$(m+"r");if(v===""){e.className="ko";e.textContent="Entrez un nombre d’abord.";return}
+if(Math.abs(Number(v)-sum)<.015){e.className="ok";e.textContent="Correct !"}else{e.className="ko";e.textContent="Pas tout à fait, recalculez chaque produit."}}
+function tab(m){clearInterval(TM);cur=m;["img","sig"].forEach(x=>{$(x).style.display=x==m?"block":"none";$("tb-"+x).className=x==m?"on":""})}
+
+function play(m,k){clearInterval(TM);var s=S[m],d=D[m],A=conv(s.I,s.K),cols=k=="c"?A[0].length:Math.floor(A[0].length/d.pw),tot=k=="c"?A.length*cols:Math.floor(A.length/d.ph)*cols,i=0;
+TM=setInterval(function(){if(i>=tot){clearInterval(TM);return}s[k]=[Math.floor(i/cols),i%cols];i++;R(m)},450)}
+function loss(m){var s=S[m],t=conv(s.I,Object.values(D[m].pk)[0]),o=conv(s.I,s.K),e=0,c=0;o.forEach((r,i)=>r.forEach((v,j)=>{e+=Math.pow(v-t[i][j],2);c++}));return e/c}
+var lb=m=>`<div class="learn"><h3 style="margin:0 0 4px;font-size:16px;font-weight:500">Comment le filtre est-il choisi ?</h3><p>Il n’est pas choisi à la main. Le concepteur fixe la taille et le nombre de filtres. Leurs valeurs sont d’abord aléatoires, puis apprises pendant l’entraînement : le réseau les corrige pour réduire l’erreur (descente de gradient).</p><p>Essayez : la cible est le filtre « ${Object.keys(D[m].pk)[0]} ». Partez d’un filtre aléatoire et regardez l’erreur baisser.</p><div class="row"><button onclick="rndK('${m}')">Filtre aléatoire</button><button class="go" onclick="learn('${m}',1)">Apprendre ×1</button><button class="go" onclick="learn('${m}',100)">Apprendre ×100</button></div><div class="calc">Erreur actuelle : <b>${f2(loss(m))}</b></div></div>`;
+function rndK(m){S[m].K=S[m].K.map(r=>r.map(()=>f2(Math.random()-.5)));R(m)}
+function learn(m,n){var s=S[m],Kt=Object.values(D[m].pk)[0],I=s.I,kh=s.K.length,kw=s.K[0].length,mx2=Math.max(.01,...I.flat().map(v=>v*v)),lr=.4/(kh*kw*mx2);
+for(var it=0;it<n;it++){var o=conv(I,s.K),t=conv(I,Kt),G=s.K.map(r=>r.map(()=>0)),N=o.length*o[0].length;
+for(var i=0;i<o.length;i++)for(var j=0;j<o[0].length;j++){var e=o[i][j]-t[i][j];for(var a=0;a<kh;a++)for(var b=0;b<kw;b++)G[a][b]+=2*e*I[i+a][j+b]/N}
+s.K=s.K.map((r,a)=>r.map((v,b)=>v-lr*G[a][b]))}
+s.K=s.K.map(r=>r.map(v=>+v.toFixed(3)));R(m)}
+document.addEventListener("keydown",function(e){if(e.target.tagName=="INPUT"||e.target.tagName=="SELECT")return;var s=S[cur];if(e.key=="ArrowRight"&&s.step<M[cur].length-1)go(cur,s.step+1);if(e.key=="ArrowLeft"&&s.step>0)go(cur,s.step-1)});
+S.img={step:0,n:8,px:[80,80],K:cp(D.img.pk["Bord vertical"]),relu:true,type:"max",c:[0,0],p:[0,0]};drawCat();grid();
+S.sig={step:0,pre:"Créneau",n:10,K:cp(D.sig.pk["Dérivée"]),relu:true,type:"max",c:[0,0],p:[0,0]};sigI();
+R("img");R("sig");
